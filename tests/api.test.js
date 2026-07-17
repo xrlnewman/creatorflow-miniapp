@@ -18,19 +18,19 @@ test('默认请求 /api/v1 并为选题写操作注入幂等键', async () => {
   const client = createApiClient({
     fetchImpl: async (url, init) => {
       requests.push({ url, init })
-      return response({ id: 'AP-0716-082', status: '待签到' })
+      return response({ id: 'CR-0716-082', status: '待排期' })
     },
   })
 
   const appointment = await client.createAppointment({
-    patientId: 'PT-001',
-    patient: '许汝林',
-    department: '全科门诊',
+    patientId: 'CR-001',
+    patient: '选题《城市夜行》',
+    department: '短视频',
     doctor: '林编辑',
     scheduledAt: '2026-07-17T09:30:00+08:00',
   })
 
-  assert.equal(appointment.id, 'AP-0716-082')
+  assert.equal(appointment.id, 'CR-0716-082')
   assert.equal(requests[0].url, '/api/v1/appointments')
   assert.equal(requests[0].init.method, 'POST')
   assert.match(requests[0].init.headers['Idempotency-Key'], /^cf-/)
@@ -47,11 +47,11 @@ test('列表请求保留查询参数，配置了完整 API 地址时不重复拼
     },
   })
 
-  await client.listAppointments({ page: 1, pageSize: 20, status: '候诊中' })
+  await client.listAppointments({ page: 1, pageSize: 20, status: '待制作' })
   await client.listFollowups({ page: 1, pageSize: 10, status: '待完成' })
 
   assert.deepEqual(urls, [
-    'http://localhost:8088/api/v1/appointments?page=1&pageSize=20&status=%E5%80%99%E8%AF%8A%E4%B8%AD',
+    'http://localhost:8088/api/v1/appointments?page=1&pageSize=20&status=%E5%BE%85%E5%88%B6%E4%BD%9C',
     'http://localhost:8088/api/v1/followups?page=1&pageSize=10&status=%E5%BE%85%E5%AE%8C%E6%88%90',
   ])
 })
@@ -65,17 +65,17 @@ test('选题生命周期和复盘完成操作走后端契约', async () => {
     },
   })
 
-  await client.checkinAppointment('AP-1')
-  await client.updateAppointmentStatus('AP-1', '候诊中')
-  await client.updateAppointmentStatus('AP-1', '制作中')
-  await client.updateAppointmentStatus('AP-1', '已完成')
+  await client.checkinAppointment('CR-1')
+  await client.updateAppointmentStatus('CR-1', '待制作')
+  await client.updateAppointmentStatus('CR-1', '制作中')
+  await client.updateAppointmentStatus('CR-1', '已发布')
   await client.completeFollowup('FW-1')
 
   assert.deepEqual(calls.map(({ url }) => url), [
-    '/api/v1/appointments/AP-1/checkin',
-    '/api/v1/appointments/AP-1/status',
-    '/api/v1/appointments/AP-1/status',
-    '/api/v1/appointments/AP-1/status',
+    '/api/v1/appointments/CR-1/checkin',
+    '/api/v1/appointments/CR-1/status',
+    '/api/v1/appointments/CR-1/status',
+    '/api/v1/appointments/CR-1/status',
     '/api/v1/followups/FW-1/complete',
   ])
   for (const { init } of calls) {
@@ -94,5 +94,5 @@ test('非零响应会抛错，调用方可以保留演示数据', async () => {
     }),
   })
 
-  await assert.rejects(() => client.updateAppointmentStatus('AP-1', '候诊中'), /状态不可推进/)
+  await assert.rejects(() => client.updateAppointmentStatus('CR-1', '待制作'), /状态不可推进/)
 })
