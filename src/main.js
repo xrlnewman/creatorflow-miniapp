@@ -31,6 +31,7 @@ let dataSource = '演示数据'
 const busyActions = new Set()
 let contentItems = demoContentItems.map((item) => ({ ...item }))
 let selectedContentId = contentItems[2].id
+const contentEventsById = new Map()
 
 const app = document.querySelector('#app')
 
@@ -123,23 +124,14 @@ function contentStatusClass(status) {
   return 'coral'
 }
 
-function contentEvents(item) {
-  const statuses = ['待选题', '写作中', '制作中', '待审核', '已发布', '已复盘']
-  const reached = statuses.slice(0, statuses.indexOf(item.status) + 1)
-  return reached.map((status, index) => ({
-    status,
-    action: index === 0 ? 'create' : status === '已发布' ? 'publish' : status === '已复盘' ? 'record_metrics' : 'advance',
-    time: `07/${18 + Math.min(index, 1)} ${9 + index}:00`,
-  }))
-}
-
 function renderContentPipeline() {
   const selected = contentItems.find((item) => item.id === selectedContentId) || contentItems[0]
   if (!selected) return ''
+  const events = contentEventsById.get(selected.id) || selected.events || []
   const scriptForm = ['待选题', '写作中', '制作中'].includes(selected.status) ? `<section class="content-form"><h4>脚本编辑</h4><textarea data-content-script placeholder="补充分镜、口播与行动号召">${escapeHtml(selected.script?.body || '')}</textarea><div class="content-actions"><button data-content-action="save-script" data-content-id="${escapeHtml(selected.id)}">保存脚本</button>${selected.status === '制作中' ? `<button data-content-action="submit-review" data-content-id="${escapeHtml(selected.id)}">提交审核</button>` : ''}</div></section>` : ''
   const publishForm = selected.status === '待审核' ? `<section class="content-form"><h4>发布确认</h4><input data-content-published-at value="2026-07-18T18:00:00+08:00" /><input data-content-actor value="主编" /><button data-content-action="publish" data-content-id="${escapeHtml(selected.id)}">确认发布</button></section>` : ''
   const metricForm = ['已发布', '已复盘'].includes(selected.status) ? `<section class="content-form"><h4>指标卡</h4><div class="content-metrics"><label>阅读量<input type="number" min="0" data-content-metric="views" value="${selected.metrics?.views || 0}" /></label><label>点赞<input type="number" min="0" data-content-metric="likes" value="${selected.metrics?.likes || 0}" /></label><label>评论<input type="number" min="0" data-content-metric="comments" value="${selected.metrics?.comments || 0}" /></label><label>分享<input type="number" min="0" data-content-metric="shares" value="${selected.metrics?.shares || 0}" /></label></div><button data-content-action="metrics" data-content-id="${escapeHtml(selected.id)}">记录复盘</button></section>` : ''
-  return `<section class="content-pipeline"><div class="section-head"><h3>内容流水线 <small>${contentItems.length} 条</small></h3><button class="content-create" data-content-action="create">＋ 新建选题</button></div><div class="content-list">${contentItems.map((item) => `<button class="content-item ${item.id === selected.id ? 'selected' : ''}" data-content-action="select" data-content-id="${escapeHtml(item.id)}"><span class="tag ${contentStatusClass(item.status)}">${escapeHtml(item.status)}</span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.channel)} · ${escapeHtml(item.owner)}</small></button>`).join('')}</div><article class="content-detail"><div class="content-detail-head"><div><span class="tag ${contentStatusClass(selected.status)}">${escapeHtml(selected.status)}</span><h4>${escapeHtml(selected.title)}</h4><p>${escapeHtml(selected.channel)} · ${escapeHtml(selected.owner)} · ${escapeHtml(selected.plannedAt)}</p></div><small>${escapeHtml(selected.id)}</small></div>${scriptForm}${publishForm}${metricForm}<section class="content-timeline"><h4>事件时间线</h4><ol>${contentEvents(selected).map((event) => `<li><time>${event.time}</time><span><strong>${event.status}</strong><small>${event.action}</small></span></li>`).join('')}</ol></section></article></section>`
+  return `<section class="content-pipeline"><div class="section-head"><h3>内容流水线 <small>${contentItems.length} 条</small></h3><button class="content-create" data-content-action="create">＋ 新建选题</button></div><div class="content-list">${contentItems.map((item) => `<button class="content-item ${item.id === selected.id ? 'selected' : ''}" data-content-action="select" data-content-id="${escapeHtml(item.id)}"><span class="tag ${contentStatusClass(item.status)}">${escapeHtml(item.status)}</span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.channel)} · ${escapeHtml(item.owner)}</small></button>`).join('')}</div><article class="content-detail"><div class="content-detail-head"><div><span class="tag ${contentStatusClass(selected.status)}">${escapeHtml(selected.status)}</span><h4>${escapeHtml(selected.title)}</h4><p>${escapeHtml(selected.channel)} · ${escapeHtml(selected.owner)} · ${escapeHtml(selected.plannedAt)}</p></div><small>${escapeHtml(selected.id)}</small></div>${scriptForm}${publishForm}${metricForm}<section class="content-timeline"><h4>事件时间线</h4><ol>${events.map((event) => `<li><time>${escapeHtml(event.createdAt || event.time || '--')}</time><span><strong>${escapeHtml(event.toStatus || event.status || event.action)}</strong><small>${escapeHtml(event.action || '')} · ${escapeHtml(event.actor || '系统')}</small></span></li>`).join('')}</ol></section></article></section>`
 }
 
 function showToast(message) {
@@ -163,6 +155,14 @@ function updateContent(id, updated) {
   contentItems = contentItems.map((item) => item.id === id ? { ...item, ...updated } : item)
 }
 
+async function refreshContentEvents(id) {
+  const result = await api.listContentEvents(id)
+  const events = Array.isArray(result?.list) ? result.list : []
+  contentEventsById.set(id, events)
+  updateContent(id, { events })
+  return events
+}
+
 async function refreshContent() {
   try {
     const result = await api.listContentItems({ page: 1, pageSize: 20 })
@@ -170,6 +170,7 @@ async function refreshContent() {
       contentItems = result.list
       selectedContentId = contentItems.find((item) => item.id === selectedContentId)?.id || contentItems[0].id
       dataSource = '接口数据'
+      await refreshContentEvents(selectedContentId)
       render()
     }
   } catch {
@@ -183,6 +184,7 @@ async function createContent() {
     const created = await api.createContentItem(input)
     contentItems = [created, ...contentItems]
     selectedContentId = created.id
+    await refreshContentEvents(created.id)
     dataSource = '接口数据'
     render()
     showToast('选题已创建，进入写作队列')
@@ -202,6 +204,7 @@ async function contentAction(action, id) {
     try {
       const detail = await api.getContentItem(id)
       updateContent(id, detail)
+      await refreshContentEvents(id)
       render()
     } catch {
       // Keep local detail when offline.
@@ -216,20 +219,24 @@ async function contentAction(action, id) {
       const body = document.querySelector('[data-content-script]')?.value?.trim()
       if (!body) return showToast('请先填写脚本内容')
       updateContent(id, await api.saveContentScript(id, { body }))
+      await refreshContentEvents(id)
       showToast('脚本已保存，状态已推进')
     } else if (action === 'submit-review') {
       updateContent(id, await api.submitContentReview(id, '主编'))
+      await refreshContentEvents(id)
       showToast('已提交审核队列')
     } else if (action === 'publish') {
       const publishedAt = document.querySelector('[data-content-published-at]')?.value?.trim()
       const actor = document.querySelector('[data-content-actor]')?.value?.trim()
       if (!publishedAt || !actor) return showToast('发布时间和审核人不能为空')
       updateContent(id, await api.publishContent(id, { publishedAt, actor }))
+      await refreshContentEvents(id)
       showToast('内容已发布，等待数据复盘')
     } else if (action === 'metrics') {
       const metrics = Object.fromEntries([...document.querySelectorAll('[data-content-metric]')].map((input) => [input.dataset.contentMetric, Number(input.value)]))
       if (Object.values(metrics).some((value) => !Number.isFinite(value) || value < 0)) return showToast('指标不能为负数')
       updateContent(id, await api.recordContentMetrics(id, metrics))
+      await refreshContentEvents(id)
       showToast('复盘指标已记录')
     }
     dataSource = '接口数据'
