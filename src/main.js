@@ -1,4 +1,5 @@
 import './styles.css'
+import './content-pipeline.css'
 
 import { createApiClient } from './api.js'
 
@@ -15,10 +16,21 @@ const demoFollowups = [
   { id: 'RV-0715-006', patientId: 'CR-001', patient: '选题《一周好物》', summary: '素材版权检查', dueAt: '明天 10:00', status: '待完成' },
 ]
 
+const demoContentItems = [
+  { id: 'CF-0718-001', title: '城市夜行：下班后的十五分钟', channel: '短视频', owner: '林编辑', plannedAt: '2026-07-18T09:00:00+08:00', status: '待选题' },
+  { id: 'CF-0718-002', title: '一周好物：把桌面整理成工作流', channel: '图文专栏', owner: '沈编辑', plannedAt: '2026-07-18T10:00:00+08:00', status: '写作中', script: { body: '开场钩子、三段主体和结尾行动号召。' } },
+  { id: 'CF-0718-003', title: '品牌访谈：小店如何留住老客', channel: '直播栏目', owner: '赵编辑', plannedAt: '2026-07-18T14:00:00+08:00', status: '制作中', script: { body: '开场钩子、三段主体和结尾行动号召。' } },
+  { id: 'CF-0718-004', title: '夏日直播：创作者增长公开课', channel: '品牌合作', owner: '周编辑', plannedAt: '2026-07-18T16:00:00+08:00', status: '待审核', script: { body: '公开课流程、嘉宾串词与观众互动问题。' } },
+  { id: 'CF-0718-005', title: '通勤装备：轻量化出行清单', channel: '短视频', owner: '林编辑', plannedAt: '2026-07-18T18:00:00+08:00', status: '已发布', publish: { publishedAt: '2026-07-18T18:00:00+08:00', actor: '主编' }, metrics: { views: 18200, likes: 920, comments: 61, shares: 140 } },
+  { id: 'CF-0718-006', title: '一张图读懂内容复盘', channel: '图文专栏', owner: '沈编辑', plannedAt: '2026-07-19T09:00:00+08:00', status: '已复盘', publish: { publishedAt: '2026-07-18T18:00:00+08:00', actor: '主编' }, metrics: { views: 12480, likes: 892, comments: 67, shares: 141 } },
+]
+
 let appointments = [...demoAppointments]
 let followups = [...demoFollowups]
 let dataSource = '演示数据'
 const busyActions = new Set()
+let contentItems = demoContentItems.map((item) => ({ ...item }))
+let selectedContentId = contentItems[2].id
 
 const app = document.querySelector('#app')
 
@@ -94,12 +106,40 @@ function render() {
     </section>
     <div class="section-head"><h3>我的选题 <small>${appointments.length} 条</small></h3><a data-action="refresh">同步 →</a></div>
     <section class="visits">${appointments.length ? appointments.map(renderAppointment).join('') : '<div class="empty">暂时没有选题，点击上方新建一条</div>'}</section>
+    ${renderContentPipeline()}
     <div class="section-head"><h3>复盘任务 <small class="coral">${followups.filter((item) => item.status !== '已完成').length} 条待办</small></h3><a data-action="refresh">查看 →</a></div>
     <section class="reminders">${followups.length ? followups.slice(0, 3).map(renderFollowup).join('') : '<div class="empty">暂无复盘任务</div>'}</section>
     <nav><button class="active">⌂<small>首页</small></button><button data-action="create-appointment">＋<small>选题</small></button><button data-action="refresh">◷<small>制作</small></button><button data-action="create-followup">♡<small>我的</small></button></nav>
     <div class="toast" hidden></div>
   </main>`
   bindActions()
+}
+
+function contentStatusClass(status) {
+  if (status === '已复盘') return 'green'
+  if (status === '已发布') return 'blue'
+  if (status === '待审核') return 'amber'
+  if (status === '制作中') return 'indigo'
+  return 'coral'
+}
+
+function contentEvents(item) {
+  const statuses = ['待选题', '写作中', '制作中', '待审核', '已发布', '已复盘']
+  const reached = statuses.slice(0, statuses.indexOf(item.status) + 1)
+  return reached.map((status, index) => ({
+    status,
+    action: index === 0 ? 'create' : status === '已发布' ? 'publish' : status === '已复盘' ? 'record_metrics' : 'advance',
+    time: `07/${18 + Math.min(index, 1)} ${9 + index}:00`,
+  }))
+}
+
+function renderContentPipeline() {
+  const selected = contentItems.find((item) => item.id === selectedContentId) || contentItems[0]
+  if (!selected) return ''
+  const scriptForm = ['待选题', '写作中', '制作中'].includes(selected.status) ? `<section class="content-form"><h4>脚本编辑</h4><textarea data-content-script placeholder="补充分镜、口播与行动号召">${escapeHtml(selected.script?.body || '')}</textarea><div class="content-actions"><button data-content-action="save-script" data-content-id="${escapeHtml(selected.id)}">保存脚本</button>${selected.status === '制作中' ? `<button data-content-action="submit-review" data-content-id="${escapeHtml(selected.id)}">提交审核</button>` : ''}</div></section>` : ''
+  const publishForm = selected.status === '待审核' ? `<section class="content-form"><h4>发布确认</h4><input data-content-published-at value="2026-07-18T18:00:00+08:00" /><input data-content-actor value="主编" /><button data-content-action="publish" data-content-id="${escapeHtml(selected.id)}">确认发布</button></section>` : ''
+  const metricForm = ['已发布', '已复盘'].includes(selected.status) ? `<section class="content-form"><h4>指标卡</h4><div class="content-metrics"><label>阅读量<input type="number" min="0" data-content-metric="views" value="${selected.metrics?.views || 0}" /></label><label>点赞<input type="number" min="0" data-content-metric="likes" value="${selected.metrics?.likes || 0}" /></label><label>评论<input type="number" min="0" data-content-metric="comments" value="${selected.metrics?.comments || 0}" /></label><label>分享<input type="number" min="0" data-content-metric="shares" value="${selected.metrics?.shares || 0}" /></label></div><button data-content-action="metrics" data-content-id="${escapeHtml(selected.id)}">记录复盘</button></section>` : ''
+  return `<section class="content-pipeline"><div class="section-head"><h3>内容流水线 <small>${contentItems.length} 条</small></h3><button class="content-create" data-content-action="create">＋ 新建选题</button></div><div class="content-list">${contentItems.map((item) => `<button class="content-item ${item.id === selected.id ? 'selected' : ''}" data-content-action="select" data-content-id="${escapeHtml(item.id)}"><span class="tag ${contentStatusClass(item.status)}">${escapeHtml(item.status)}</span><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.channel)} · ${escapeHtml(item.owner)}</small></button>`).join('')}</div><article class="content-detail"><div class="content-detail-head"><div><span class="tag ${contentStatusClass(selected.status)}">${escapeHtml(selected.status)}</span><h4>${escapeHtml(selected.title)}</h4><p>${escapeHtml(selected.channel)} · ${escapeHtml(selected.owner)} · ${escapeHtml(selected.plannedAt)}</p></div><small>${escapeHtml(selected.id)}</small></div>${scriptForm}${publishForm}${metricForm}<section class="content-timeline"><h4>事件时间线</h4><ol>${contentEvents(selected).map((event) => `<li><time>${event.time}</time><span><strong>${event.status}</strong><small>${event.action}</small></span></li>`).join('')}</ol></section></article></section>`
 }
 
 function showToast(message) {
@@ -117,6 +157,86 @@ function updateAppointment(id, updater) {
 
 function updateFollowup(id, updater) {
   followups = followups.map((item) => item.id === id ? updater(item) : item)
+}
+
+function updateContent(id, updated) {
+  contentItems = contentItems.map((item) => item.id === id ? { ...item, ...updated } : item)
+}
+
+async function refreshContent() {
+  try {
+    const result = await api.listContentItems({ page: 1, pageSize: 20 })
+    if (Array.isArray(result?.list) && result.list.length) {
+      contentItems = result.list
+      selectedContentId = contentItems.find((item) => item.id === selectedContentId)?.id || contentItems[0].id
+      dataSource = '接口数据'
+      render()
+    }
+  } catch {
+    // Keep the synthetic content list available for offline demos.
+  }
+}
+
+async function createContent() {
+  const input = { title: '夜班人的补给站', channel: '短视频', owner: '林编辑', plannedAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() }
+  try {
+    const created = await api.createContentItem(input)
+    contentItems = [created, ...contentItems]
+    selectedContentId = created.id
+    dataSource = '接口数据'
+    render()
+    showToast('选题已创建，进入写作队列')
+  } catch {
+    const local = { ...input, id: `CF-DEMO-${Date.now().toString().slice(-6)}`, status: '待选题' }
+    contentItems = [local, ...contentItems]
+    selectedContentId = local.id
+    render()
+    showToast('服务暂不可用，已保留演示选题')
+  }
+}
+
+async function contentAction(action, id) {
+  if (action === 'select') {
+    selectedContentId = id
+    render()
+    try {
+      const detail = await api.getContentItem(id)
+      updateContent(id, detail)
+      render()
+    } catch {
+      // Keep local detail when offline.
+    }
+    return
+  }
+  if (action === 'create') return createContent()
+  const item = contentItems.find((entry) => entry.id === id)
+  if (!item) return
+  try {
+    if (action === 'save-script') {
+      const body = document.querySelector('[data-content-script]')?.value?.trim()
+      if (!body) return showToast('请先填写脚本内容')
+      updateContent(id, await api.saveContentScript(id, { body }))
+      showToast('脚本已保存，状态已推进')
+    } else if (action === 'submit-review') {
+      updateContent(id, await api.submitContentReview(id, '主编'))
+      showToast('已提交审核队列')
+    } else if (action === 'publish') {
+      const publishedAt = document.querySelector('[data-content-published-at]')?.value?.trim()
+      const actor = document.querySelector('[data-content-actor]')?.value?.trim()
+      if (!publishedAt || !actor) return showToast('发布时间和审核人不能为空')
+      updateContent(id, await api.publishContent(id, { publishedAt, actor }))
+      showToast('内容已发布，等待数据复盘')
+    } else if (action === 'metrics') {
+      const metrics = Object.fromEntries([...document.querySelectorAll('[data-content-metric]')].map((input) => [input.dataset.contentMetric, Number(input.value)]))
+      if (Object.values(metrics).some((value) => !Number.isFinite(value) || value < 0)) return showToast('指标不能为负数')
+      updateContent(id, await api.recordContentMetrics(id, metrics))
+      showToast('复盘指标已记录')
+    }
+    dataSource = '接口数据'
+  } catch {
+    showToast('服务暂不可用，请稍后重试')
+  }
+  render()
 }
 
 function localAppointment() {
@@ -244,6 +364,9 @@ async function handleAction(action, id) {
 }
 
 function bindActions() {
+  document.querySelectorAll('[data-content-action]').forEach((element) => {
+    element.addEventListener('click', () => contentAction(element.dataset.contentAction, element.dataset.contentId))
+  })
   document.querySelectorAll('[data-action]').forEach((element) => {
     element.addEventListener('click', () => handleAction(element.dataset.action, element.dataset.id))
   })
@@ -251,3 +374,4 @@ function bindActions() {
 
 render()
 void refreshFromApi()
+void refreshContent()

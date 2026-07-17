@@ -96,3 +96,33 @@ test('非零响应会抛错，调用方可以保留演示数据', async () => {
 
   await assert.rejects(() => client.updateAppointmentStatus('CR-1', '待制作'), /状态不可推进/)
 })
+
+test('内容流水线客户端支持选题、脚本、审核、发布和指标复盘', async () => {
+  const calls = []
+  const client = createApiClient({
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init })
+      return response({ id: 'CF-1', status: '已复盘' })
+    },
+  })
+
+  await client.listContentItems({ status: '待审核', owner: '林编辑' })
+  await client.getContentItem('CF-1')
+  await client.listContentEvents('CF-1')
+  await client.createContentItem({ title: '城市夜行', channel: '短视频', owner: '林编辑', plannedAt: '2026-07-18' })
+  await client.saveContentScript('CF-1', { body: '脚本' })
+  await client.submitContentReview('CF-1', '主编')
+  await client.publishContent('CF-1', { publishedAt: '2026-07-18T18:00:00+08:00', actor: '主编' })
+  await client.recordContentMetrics('CF-1', { views: 100, likes: 12, comments: 3, shares: 4 })
+
+  assert.deepEqual(calls.map(({ url }) => url), [
+    '/api/v1/content-items?status=%E5%BE%85%E5%AE%A1%E6%A0%B8&owner=%E6%9E%97%E7%BC%96%E8%BE%91',
+    '/api/v1/content-items/CF-1',
+    '/api/v1/content-items/CF-1/events',
+    '/api/v1/content-items',
+    '/api/v1/content-items/CF-1/script',
+    '/api/v1/content-items/CF-1/submit-review',
+    '/api/v1/content-items/CF-1/publish',
+    '/api/v1/content-items/CF-1/metrics',
+  ])
+})
