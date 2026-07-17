@@ -1,6 +1,6 @@
 # CreatorFlow Miniapp
 
-免费开源的内容排期与创作者协同移动端，覆盖选题创建、排期、制作状态、创作者档案和复盘任务。演示数据均为虚构，不涉及支付或真实创作者隐私。
+内容排期与创作者协同移动端，覆盖选题创建、排期、制作状态、创作者档案和复盘任务。演示数据均为虚构，不涉及支付或真实创作者隐私。
 
 ## 本地运行
 
@@ -15,7 +15,7 @@ npm run dev
 VITE_API_PROXY_TARGET=http://localhost:8088 npm run dev
 ```
 
-## API 闭环
+## API 与状态同步
 
 页面默认请求 `/api/v1`，生产环境可通过 `VITE_API_BASE_URL` 指向独立的 CreatorFlow API 服务。所有写操作会自动生成 `Idempotency-Key`，避免重复选题、重复签到和重复完成复盘。
 
